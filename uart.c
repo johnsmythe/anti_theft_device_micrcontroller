@@ -1,11 +1,18 @@
 #include "uart.h"
 #include <msp430.h>
 #include <stdio.h>
+#include <string.h>
 
 //modulation parameters to get 9600 baud
 unsigned divider = 104;
 unsigned char fM = 1;
 unsigned char sM = 0;
+
+//int bufferReady = 0;
+
+char gsmBuf[1024];
+int bufIndex = 0;
+int startTransmission = 0;
 
 void configureUCA0(){
     /* Place UCA0 in Reset to be configured */
@@ -21,7 +28,7 @@ void configureUCA0(){
     UCA0CTL1 &= ~UCSWRST;
 
 	//enable rx interrupt on UCA0, after taking it out of reset
-	UCA0IE |= UCRXIE;
+	enable_UCA0_interrupt();
 }
 
 void configureUCA1(){
@@ -38,16 +45,37 @@ void configureUCA1(){
     UCA1CTL1 &= ~UCSWRST;
 
 	//enable rx interrup on UCA1
-	UCA1IE |= UCRXIE;
+	enable_UCA1_interrupt();
 
 }
 
+void disable_UCA0_interrupt(){
+	UCA0IE &= ~UCRXIE;
+}
+
+void enable_UCA0_interrupt(){
+	UCA0IE |= UCRXIE;
+}
+
+void disable_UCA1_interrupt(){
+	UCA1IE &= ~UCRXIE;
+}
+
+void enable_UCA1_interrupt(){
+	UCA1IE |= UCRXIE;
+}
+
 void uart_send_string( const char * command ){
-    while( *command != '\0' ){
-        while (!(UCA0IFG & UCTXIFG));
-        UCA0TXBUF = *command;
-        command++;
-    }
+	startTransmission = 1;
+	do{
+		while( *command != '\0' ){
+			while (!(UCA0IFG & UCTXIFG));
+			//printf("transmitting: %c\n", *command);
+			UCA0TXBUF = *command;
+			command++;
+		}
+		while( startTransmission );
+	} while( !strcmp( gsmBuf, "ERROR" ));
 }
 
 void uart_send_char( unsigned char command ){
@@ -58,19 +86,13 @@ void uart_send_char( unsigned char command ){
 #pragma vector=USCI_A0_VECTOR
 __interrupt void USCI_A0_ISR(void)
 {
-    //while (!(UCA0IFG & UCTXIFG));
 
-    //printf( "char: %c\n", (char)UCA0RXBUF );
-    //UCA0IFG |= UCTXIFG;
-
-    //printf("interrupt from usca0\n");
-    //unsigned char tx_char;
 	P3OUT |= 0x40; //set pin 41 --> rts to high to prevent gsm from sending extra shit cause im busy;
 	//P3OUT &= 0xBF;
 	char temp;
     switch(__even_in_range(UCA0IV,4)){
     	case 0:
-    		printf( "case 0 no interrupt\n");
+    		//printf( "case 0 no interrupt\n");
     		break;                          				// Vector 0 - no interrupt
     	case 2:
     		//while ( !(UCA0IFG & UCRXIFG ));// Vector 2 - RXIFG, rx buffer is ready
@@ -82,6 +104,50 @@ __interrupt void USCI_A0_ISR(void)
     		}*/
     		temp = (char) UCA0RXBUF;
     		printf ( "rxed char %c\n", temp);
+    		//gsmBuf[bufIndex++] = temp;
+    		if( temp == 'K' && bufIndex >= 1 && gsmBuf[bufIndex - 1 ] == 'O' ){
+    			//end of transmission
+    			//printf("in here\n");
+    			gsmBuf[ bufIndex - 1 ]='\0';
+    			startTransmission = 0;
+    			bufIndex = 0;
+    		}
+
+    		//any better ideas to parse this?
+    		else if ( temp == 'R' && bufIndex >= 4 ){
+    			if( gsmBuf[bufIndex - 1] == 'O' &&
+    					gsmBuf[bufIndex - 2] == 'R' &&
+    					gsmBuf[bufIndex -3 ] == 'R' &&
+    					gsmBuf[bufIndex - 4] == 'E' ){
+    				printf("error\n");
+    				snprintf( gsmBuf , 6, "ERROR");
+        			startTransmission = 0;
+        			bufIndex = 0;
+    			}
+    		}
+
+    		if( startTransmission && bufIndex < 1024 ){
+    			gsmBuf[ bufIndex++ ] = temp;
+    		}
+    		//if( temp = 'O')
+
+    		/*if( temp == '\r' ){
+    			if( startTransmission ){
+    				gsmBuf[bufIndex++] = '\0';
+    				startTransmission = 0;
+    				bufIndex = 0;
+    				printf("buf is now: %s\n", gsmBuf);
+    				bufferReady = 1;
+    			}
+    			else{
+    				startTransmission = 1;
+    				bufferReady = 0;
+    			}
+    		}
+
+    		if ( startTransmission ){
+    			gsmBuf[bufIndex++] = temp;
+    		}*/
     		while (!(UCA1IFG & UCTXIFG));
     		UCA1TXBUF = temp; //write to the terminal
     		//printf( "character is : %c\n", temp );
