@@ -17,6 +17,11 @@ int counter = 0;
 
 int main(void) {
 
+	/*char newmessage[20];
+	char textmessage[] = "+CMT: \"+16472006075\",\"\",\"15/02/27,20:23:11-20\"\nAnother one";
+	sscanf(textmessage, "+CMT:%*s\n%s", newmessage );
+	printf("message: %s\n", newmessage );*/
+
 	configureMSP();
     //UCA0IE |= UCTXIE;
     //UCA1IE |= UCRXIE + UCTXIE; //enable Rx & Tx interrupt
@@ -52,6 +57,7 @@ int main(void) {
     	//__delay_cycles(5000000);
     	//printf( "going to LPM0\n");
     	TA0CTL ^= (TASSEL_1 + MC_1 );	//reenable timer interrupt
+    	printf( "going to sleep\n");
     	__bis_SR_register(LPM0_bits);
     };
 
@@ -60,6 +66,7 @@ int main(void) {
 void configureGSM(){
 	uart_send_string("ATE0\r");
 	uart_send_string("AT+CMGF=1\r");
+	uart_send_string( "AT+CMGD=1,4\r"); //delete message
 	//set the notification of text messages directly to terminal
 	uart_send_string( "AT+CNMI=2,2,0,0,0\r");
 	printf( "gsm configure success!\n");
@@ -86,9 +93,8 @@ void configureMSP(){
 
 	    __enable_interrupt(); //enable the interrupt for the uart ports so we can configure gsm
 	    configureGSM();
-	    disable_UCA0_interrupt();
-	    configureTimer();
-
+	    //disable_UCA0_interrupt();
+	    //configureTimer();
 	    //UCA0IE |= UCRXIE + UCTXIE; //enable Rx & Tx interrupt
 	    //UCA0IE |= UCTXIE;
 	    //__enable_interrupt();
@@ -105,7 +111,7 @@ void configureTimer(){
 #pragma vector=TIMER0_A0_VECTOR
    __interrupt void Timer0_A0 (void) {		// Timer0 A0 interrupt service routine
 
-	//printf( "timer interrupt, counter is %d\n", counter++ );
+	printf( "timer interrupt, counter is %d\n", counter++ );
 	counter++;
 	if( counter == 10 ){
 

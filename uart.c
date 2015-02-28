@@ -8,6 +8,8 @@ unsigned divider = 104;
 unsigned char fM = 1;
 unsigned char sM = 0;
 
+int char_count = 0;
+
 //int bufferReady = 0;
 
 char gsmBuf[1024];
@@ -94,12 +96,14 @@ void enable_UCA1_interrupt(){
 void uart_send_string( const char * command ){
 	startTransmission = 1;
 	do{
+		P3OUT |= 0x40;
 		while( *command != '\0' ){
 			while (!(UCA0IFG & UCTXIFG));
 			//printf("transmitting: %c\n", *command);
 			UCA0TXBUF = *command;
 			command++;
 		}
+		P3OUT &= 0xBF; //enable rts to get something back
 		while( startTransmission );
 	} while( !strcmp( gsmBuf, "ERROR" ));
 }
@@ -130,33 +134,62 @@ __interrupt void USCI_A0_ISR(void)
     			break;
     		}*/
     		temp = (char) UCA0RXBUF;
+    		if( bufIndex < 1024 ){
+    			gsmBuf[ bufIndex++ ] = temp;
+    			gsmBuf[ bufIndex ] = '\0';
+    			//printf( "buf is now: %s\n", gsmBuf);
+    		}
     		//printf ( "rxed char %c\n", temp);
     		//gsmBuf[bufIndex++] = temp;
-    		if( temp == 'K' && bufIndex >= 1 && gsmBuf[bufIndex - 1 ] == 'O' ){
-    			//end of transmission
-    			//printf("in here\n");
-    			gsmBuf[ bufIndex - 1 ]='\0';
-    			//printf( "ending transmission\n");
-    			startTransmission = 0;
-    			bufIndex = 0;
-    		}
+    		if( startTransmission ){
+				if( strstr( gsmBuf, "OK" ) ){
+					//end of transmission
+					//printf("in here\n");
+					//printf( "ending transmission\n");
+					//snprintf( gsmBuf, 3, "OK" );
+					startTransmission = 0;
+					bufIndex = 0;
+				}
 
-    		//any better ideas to parse this?
-    		else if ( temp == 'R' && bufIndex >= 4 ){
-    			if( gsmBuf[bufIndex - 1] == 'O' &&
-    					gsmBuf[bufIndex - 2] == 'R' &&
-    					gsmBuf[bufIndex -3 ] == 'R' &&
-    					gsmBuf[bufIndex - 4] == 'E' ){
-    				//printf("error\n");
-    				snprintf( gsmBuf , 6, "ERROR");
-        			startTransmission = 0;
-        			bufIndex = 0;
+				//any better ideas to parse this?
+				else if ( strstr(gsmBuf, "ERROR")){
+					//printf("error\n");
+					snprintf( gsmBuf , 6, "ERROR");
+					startTransmission = 0;
+					bufIndex = 0;
+				}
+
+				//gsmBuf[0] = '\0';
+    		}
+    		else{
+    			//we are not confirming a sent command
+    			//printf("shit\n");
+    			//char textmessage[20];
+    			if(strstr(gsmBuf, "+CMT")){
+    				bufIndex = 0;
+    				gsmBuf[0] = '\0';
+    				char_count=0;
     			}
+    			else if(strstr( gsmBuf, "Arm" )){
+							printf("im leaving LPM0\n");
+							//startTransmission = 0;
+							//bufIndex = 0;
+							disable_UCA0_interrupt();
+							configureTimer();
+							__bic_SR_register_on_exit(LPM0_bits);
+							char_count = 0;
+							bufIndex = 0;
+							gsmBuf[0] = '\0';
+				}
     		}
 
-    		if( startTransmission && bufIndex < 1024 ){
+
+    		/*if( startTransmission && bufIndex < 1024 ){
     			gsmBuf[ bufIndex++ ] = temp;
-    		}
+    		}*/
+
+
+
     		//if( temp = 'O')
 
     		/*if( temp == '\r' ){
@@ -195,7 +228,8 @@ __interrupt void USCI_A0_ISR(void)
     	default: break;
     }
     //printf("char: %c\n", temp);
-    P3OUT &=0xBF; //reenable the rts line
+    P3OUT &=0xBF;
+    //reenable the rts line
 }
 
 #pragma vector=USCI_A3_VECTOR
