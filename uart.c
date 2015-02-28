@@ -49,12 +49,38 @@ void configureUCA1(){
 
 }
 
+void configureUCA3(){
+    /* Place UCA3 in Reset to be configured */
+    UCA3CTL1 = UCSWRST;
+
+    /* Configure */
+    UCA3CTL1 = UCSSEL1;
+    UCA3BR0 = divider & 0xFF;
+    UCA3BR1 = divider >> 8;
+    UCA3MCTL = ( (fM & 0xF) << 4 |(sM & 0x7) << 1);
+
+    /* Take UCA3 out of reset */
+    UCA3CTL1 &= ~UCSWRST;
+
+	//enable rx interrup on UCA1
+	enable_UCA3_interrupt();
+
+}
+
 void disable_UCA0_interrupt(){
 	UCA0IE &= ~UCRXIE;
 }
 
 void enable_UCA0_interrupt(){
 	UCA0IE |= UCRXIE;
+}
+
+void enable_UCA3_interrupt(){
+	UCA3IE |= UCRXIE;
+}
+
+void disable_UCA3_interrupt(){
+	UCA3IE &= ~UCRXIE;
 }
 
 void disable_UCA1_interrupt(){
@@ -80,6 +106,7 @@ void uart_send_string( const char * command ){
 
 void uart_send_char( unsigned char command ){
 	while(!(UCA0IFG & UCTXIFG));
+	//printf("transmitting: %c\n", command);
 	UCA0TXBUF = command;
 }
 
@@ -103,12 +130,13 @@ __interrupt void USCI_A0_ISR(void)
     			break;
     		}*/
     		temp = (char) UCA0RXBUF;
-    		printf ( "rxed char %c\n", temp);
+    		//printf ( "rxed char %c\n", temp);
     		//gsmBuf[bufIndex++] = temp;
     		if( temp == 'K' && bufIndex >= 1 && gsmBuf[bufIndex - 1 ] == 'O' ){
     			//end of transmission
     			//printf("in here\n");
     			gsmBuf[ bufIndex - 1 ]='\0';
+    			//printf( "ending transmission\n");
     			startTransmission = 0;
     			bufIndex = 0;
     		}
@@ -119,7 +147,7 @@ __interrupt void USCI_A0_ISR(void)
     					gsmBuf[bufIndex - 2] == 'R' &&
     					gsmBuf[bufIndex -3 ] == 'R' &&
     					gsmBuf[bufIndex - 4] == 'E' ){
-    				printf("error\n");
+    				//printf("error\n");
     				snprintf( gsmBuf , 6, "ERROR");
         			startTransmission = 0;
         			bufIndex = 0;
@@ -148,8 +176,8 @@ __interrupt void USCI_A0_ISR(void)
     		if ( startTransmission ){
     			gsmBuf[bufIndex++] = temp;
     		}*/
-    		while (!(UCA1IFG & UCTXIFG));
-    		UCA1TXBUF = temp; //write to the terminal
+    		while (!(UCA3IFG & UCTXIFG));
+    		UCA3TXBUF = temp; //write to the terminal
     		//printf( "character is : %c\n", temp );
     		//buff[count++] = temp;
     		//__delay_cycles(600000);
@@ -170,23 +198,23 @@ __interrupt void USCI_A0_ISR(void)
     P3OUT &=0xBF; //reenable the rts line
 }
 
-#pragma vector=USCI_A1_VECTOR
-__interrupt void USCI_A1_ISR(void)
+#pragma vector=USCI_A3_VECTOR
+__interrupt void USCI_A3_ISR(void)
 {
     //while (!(UCA1IFG & UCTXIFG));
 
     //printf( "char: %c\n", (char)UCA0RXBUF );
     //UCA1IFG |= UCTXIFG;
 
-    printf("interrupt from usca1\n");
+    printf("interrupt from usca3\n");
     //unsigned char tx_char;
     unsigned char tx_char;
-    switch(__even_in_range(UCA1IV,4)){
+    switch(__even_in_range(UCA3IV,4)){
     	case 0:
     		printf( "case 0 no interrupt\n");
     		break;                          				// Vector 0 - no interrupt
     	case 2:                                 				// Vector 2 - RXIFG, rx buffer is ready
-    	  tx_char = UCA1RXBUF;
+    	  tx_char = UCA3RXBUF;
     	  printf( "Rxed char: %c\n", tx_char );                  // RXBUF1 to TXBUF1
     	  uart_send_char( tx_char );
     	  break;

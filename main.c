@@ -46,7 +46,7 @@ int main(void) {
     	//main event loop, check for text messages;
     	enable_UCA0_interrupt();
     	uart_send_string("AT+CMGL=\"REC UNREAD\"\r");
-    	//printf("string buffer: %s", gsmBuf );
+    	printf("string buffer: %s", gsmBuf );
     	disable_UCA0_interrupt();
     	//printf( "sleeping for 5 secs maybe before going back to LPM\n");
     	//__delay_cycles(5000000);
@@ -60,6 +60,8 @@ int main(void) {
 void configureGSM(){
 	uart_send_string("ATE0\r");
 	uart_send_string("AT+CMGF=1\r");
+	//set the notification of text messages directly to terminal
+	uart_send_string( "AT+CNMI=2,2,0,0,0\r");
 	printf( "gsm configure success!\n");
 }
 
@@ -68,16 +70,19 @@ void configureMSP(){
 	 WDTCTL = WDTPW | WDTHOLD;    // Stop watchdog timer
 
 	    /* Configure Pin Muxing P3.5 RXD and P3.4 TXD */
-	    P3SEL |= 0x30;
+	    P3SEL |= 0xB0;
 	    P3DIR |= 0x40;
 	    P3OUT &= 0xBF; //set RTS to low to start recieve from GSM
+	    //P3OUT |= 0x80; //set the reset high 3.7
 
 	    // configure pin muxing pin 54 P5.7 rxd, pin 53 P5.6 txd uca1
-	    P5SEL |= 0xc0;
+	    //P5SEL |= 0xc0;
+	    P10SEL |= 0x30;
 
 
 	    configureUCA0(); //configures uca0 baudrate and enables interrupt
 	    //configureUCA1(); //this is from laptop
+	    //configureUCA3(); //this is from laptop
 
 	    __enable_interrupt(); //enable the interrupt for the uart ports so we can configure gsm
 	    configureGSM();
