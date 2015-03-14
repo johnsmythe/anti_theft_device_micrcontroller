@@ -1,6 +1,7 @@
 #include <msp430.h> 
 #include <stdio.h>
 #include "uart.h"
+#include <assert.h>
 
 /*
  * main.c
@@ -9,18 +10,17 @@ void configureTimer( void );
 void configureMSP( void );
 void configureGSM( void );
 
-int counter = 0;
+void processBuffer( const char * buf );
+
+int notify = 1;
+
+//int counter = 0;
 
 //char buff[1024];
 //int count = 0;
 //int flag = 0;
 
 int main(void) {
-
-	/*char newmessage[20];
-	char textmessage[] = "+CMT: \"+16472006075\",\"\",\"15/02/27,20:23:11-20\"\nAnother one";
-	sscanf(textmessage, "+CMT:%*s\n%s", newmessage );
-	printf("message: %s\n", newmessage );*/
 
 	configureMSP();
     //UCA0IE |= UCTXIE;
@@ -49,16 +49,24 @@ int main(void) {
 
     while( 1 ){
     	//main event loop, check for text messages;
+    	__delay_cycles(10000000);
     	enable_UCA0_interrupt();
+    	if(notify){
+    		sendText("ready", "16472006075");
+    		uart_send_string( "AT+CMGD=1,4\r");
+    		notify=0;
+    	}
     	uart_send_string("AT+CMGL=\"REC UNREAD\"\r");
-    	printf("string buffer: %s", gsmBuf );
+    	printf("string buffer: %s\n", gsmBuf );
+    	//processBuffer(gsmBuf);
+    	uart_send_string( "AT+CMGD=1,4\r");
     	disable_UCA0_interrupt();
     	//printf( "sleeping for 5 secs maybe before going back to LPM\n");
     	//__delay_cycles(5000000);
     	//printf( "going to LPM0\n");
-    	TA0CTL ^= (TASSEL_1 + MC_1 );	//reenable timer interrupt
+    	//TA0CTL ^= (TASSEL_1 + MC_1 );	//reenable timer interrupt
     	printf( "going to sleep\n");
-    	__bis_SR_register(LPM0_bits);
+    	//__bis_SR_register(LPM0_bits);
     };
 
 }
@@ -108,17 +116,29 @@ void configureTimer(){
 
 }
 
-#pragma vector=TIMER0_A0_VECTOR
-   __interrupt void Timer0_A0 (void) {		// Timer0 A0 interrupt service routine
+void processBuffer( const char * buf ){
+	char message[10];
+	char * ptr = strtok(buf, "\",\r\n");
+	if ( ptr ){
+		if(strstr(ptr, "+CMGL")){
+			ptr = strtok(NULL, "\",\r\n");
+			ptr = strtok(NULL, "\",\r\n");
+			assert( ptr );
+			printf("number is %s\n", ptr);
+			ptr = strtok(NULL, "\",\r\n");
+			ptr = strtok(NULL, "\",\r\n");
+		}
+	}
+}
 
+/*#pragma vector=TIMER0_A0_VECTOR
+   __interrupt void Timer0_A0 (void) {		// Timer0 A0 interrupt service routine
 	printf( "timer interrupt, counter is %d\n", counter++ );
 	counter++;
 	if( counter == 10 ){
-
 		//TA0CTL &= ~MC0; //disable interrupts
 		TA0CTL ^= (TASSEL_1 + MC_1 );
 		printf( "stop interrupts\n" );
-
 		counter = 0;
 		//__delay_cycles(5000000);
 		//printf( "reenable interrupts\n" );
@@ -128,4 +148,4 @@ void configureTimer(){
 		__bic_SR_register_on_exit(LPM0_bits);
 	}
 
-}
+}*/

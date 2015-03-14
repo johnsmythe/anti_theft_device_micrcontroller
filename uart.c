@@ -108,6 +108,13 @@ void uart_send_string( const char * command ){
 	} while( !strcmp( gsmBuf, "ERROR" ));
 }
 
+void sendText( const char * message, const char * number ){
+	char sendbuf[100];
+	snprintf( sendbuf, 100, "AT+CMGS=\"%s\"\r%s%c", number, message, 26 );
+	printf( "sending message %s\n", sendbuf);
+	uart_send_string(sendbuf);
+}
+
 void uart_send_char( unsigned char command ){
 	while(!(UCA0IFG & UCTXIFG));
 	//printf("transmitting: %c\n", command);
@@ -174,12 +181,14 @@ __interrupt void USCI_A0_ISR(void)
 							printf("im leaving LPM0\n");
 							//startTransmission = 0;
 							//bufIndex = 0;
+							//configureTimer();
 							disable_UCA0_interrupt();
-							configureTimer();
-							__bic_SR_register_on_exit(LPM0_bits);
 							char_count = 0;
 							bufIndex = 0;
 							gsmBuf[0] = '\0';
+							printf("exiting\n");
+							//disable_UCA0_interrupt();
+							__bic_SR_register_on_exit(LPM0_bits);
 				}
     		}
 
