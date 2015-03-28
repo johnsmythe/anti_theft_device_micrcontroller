@@ -3,8 +3,7 @@
 	void configureUCA0(void);
 	void configureUCA1(void);
 	void uart_send_char( unsigned char );
-	void uart_send_string( char * string );
-	void uart_send_string_slower( char * string );
+	void uart_send_string( char * string, int mode );
 	void disable_UCA0_interrupt( void );
 	void enable_UCA0_interrupt( void );
 	void disable_UCA1_interrupt( void );

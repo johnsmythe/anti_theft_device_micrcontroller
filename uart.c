@@ -93,7 +93,8 @@ void clear_buf(){
 	bufIndex = 0;
 }
 
-void uart_send_string_slower( char * command){
+//mode 0 is slow, mode 1 is faster
+void uart_send_string( char * command, int mode ){
 	char * command_cpy = command;
 	do{
 		command = command_cpy;
@@ -108,34 +109,13 @@ void uart_send_string_slower( char * command){
 		P3OUT &= 0xBF; //enable rts to get something back
 		//CRUCIAL, if i dont get interrupted during delay_cycles by the uart, I am screwed
 		//seriously if this part does not get through, there is no way to handle message transmission
-		__delay_cycles(6000000);
-		disable_UCA0_interrupt();
-		/*if( type ){
-			break;	//sending text message does not require ok
-		}*/
-		printf("woken up, gsmbuf is: %s\n", gsmBuf);
-	}while(!strstr( gsmBuf, "OK" ));
-}
-void uart_send_string( char * command){
-	char * command_cpy = command;
-	do{
-		command = command_cpy;
-		clear_buf();
-		enable_UCA0_interrupt();
-		P3OUT |= 0x40;	//disable rts to not interrupt transmission
-		while( *command != '\0' ){
-			while (!(UCA0IFG & UCTXIFG));
-			UCA0TXBUF = *command;
-			command++;
+		if( mode ){
+			__delay_cycles(600000);
 		}
-		P3OUT &= 0xBF; //enable rts to get something back
-		//CRUCIAL, if i dont get interrupted during delay_cycles by the uart, I am screwed
-		//seriously if this part does not get through, there is no way to handle message transmission
-		__delay_cycles(600000);
+		else{
+			__delay_cycles(6000000);
+		}
 		disable_UCA0_interrupt();
-		/*if( type ){
-			break;	//sending text message does not require ok
-		}*/
 		printf("woken up, gsmbuf is: %s\n", gsmBuf);
 	}while(!strstr( gsmBuf, "OK" ));
 }
@@ -145,7 +125,7 @@ void sendText( const char * message, const char * number ){
 	snprintf( sendbuf, 100, "AT+CMGS=\"%s\"\r%s%c", number, message, 26 );
 	//char 26 is control-z
 	printf("sending message %s\n", sendbuf);
-	uart_send_string_slower(sendbuf);
+	uart_send_string(sendbuf, 0);
 }
 
 void uart_send_char( unsigned char command ){
