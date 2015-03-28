@@ -1,17 +1,22 @@
 #include <msp430.h> 
 #include <stdio.h>
 #include "uart.h"
-#include <assert.h>
 #include <string.h>
+
+#define NUM_TRIES 15
+#define BUF_LEN 20
+#define TEXT_BUF_LEN 100
+#define SLEEP_CYCLE 5000000
 
 //TODO: maybe get the number from the arm message instead of hard coding it?, in a more
 //sophisticated system, you would have an onboard chip that stores the number and you just read it
 
-char mikesnumber[] = "+16472006075";
+//char mikesnumber[] = "+16472006075";
+char mikesnumber[] = "+17059550333";
 
 //these are the armed coordinates
-char longitude[20];
-char latitude[20];
+char longitude[BUF_LEN];
+char latitude[BUF_LEN];
 
 void configureMSP( void );
 void configureGSM( void );
@@ -20,6 +25,7 @@ int parseGPS( const char * gpgllMessage, char * lotude, char * latude );
 
 void processGPS( void );
 void processTEXT( void );
+void sendText( const char * message, const char * number );
 void setInitialGPSstate( void );
 int checksum( const char * string, char sum );
 int notify = 1; //flag for sending armed message at most once
@@ -32,14 +38,16 @@ int main(void) {
 
     while( 1 ){
 		//main event loop, check for text messages;
-		printf("sleep for 10 seconds\n");
-		__delay_cycles(10000000);
+		printf("sleep for 5 seconds\n");
+		__delay_cycles(SLEEP_CYCLE);
     	if( notify ){
-			char textmsg[100];
+			char textmsg[TEXT_BUF_LEN];
 			setInitialGPSstate();
-			snprintf(textmsg, 100, "armed at: latitude %s, longitude %s", latitude,
-					longitude);
-			printf("sending text: '%s'\n", textmsg);
+			sendText( "Armed at ", mikesnumber );
+			//snprintf(textmsg, TEXT_BUF_LEN, "armed at: latitude %s, longitude %s", latitude,
+					//longitude);
+			snprintf( textmsg, TEXT_BUF_LEN, "%s %s", latitude, longitude );
+			//printf("sending text: '%s'\n", textmsg);
     		sendText(textmsg, mikesnumber);
     		uart_send_string("AT+CMGD=1,4\r", 1);	//clear the text messages
     		notify=0;
@@ -96,23 +104,23 @@ void configureGPS(){
 }
 
 int parseGPS( const char * gpgllMessage, char * latude, char * lotude ){
-	char gpsMessage[100];
-	char lat_dir[2];
-	char long_dir[2];
-	char valid;
-	int sum;
+	char gpsMessage[TEXT_BUF_LEN];
+	char lat_dir, long_dir, valid;
+	int lat_degrees, long_degrees, sum;
+	float lat_min, long_min;
 	//im expecting a very specific message format, if im not given:
 	//<prefix><userid>$GPGLL,4916.45,N,12311.12,W,225444,A,*<checksum> i will fail
-	//if(sscanf(gpgllMessage, "%*[^$]$%99[^*]*%x%*s", gpsMessage, &sum) == 2){
 	if(sscanf(gpgllMessage, "%*[^$]$%99[^*]*%x%*s", gpsMessage, &sum) == 2){
 		if(checksum(gpsMessage, sum)){
-			if(sscanf( gpsMessage, "GPGLL,%18[^,],%1s,%18[^,],%1s,%*[^,],%c%*s", latude,
-				lat_dir, lotude, long_dir, &valid ) == 5 ){
-				if( valid == 'A'){
-					strcat(latude, lat_dir);
-					strcat(lotude, long_dir);
-					return 1;
-				}
+			if(sscanf( gpsMessage, "GPGLL,%2d%8f,%c,%3d%8f,%c,%*[^,],%c%*s", &lat_degrees, &lat_min,
+				&lat_dir, &long_degrees, &long_min, &long_dir, &valid ) == 7 ){
+					if( valid == 'A'){
+						float _latitude = ( lat_dir == 'N' ) ? ((float)lat_degrees + lat_min/60) : -((float)lat_degrees + lat_min/60);
+						float _longitude = ( long_dir == 'W' ) ? -((float)long_degrees + long_min/60) : ((float)long_degrees + long_min/60);
+						snprintf( latude, BUF_LEN, "%6.2f", _latitude );
+						snprintf( lotude, BUF_LEN, "%7.2f", _longitude );
+						return 1;
+					}
 			}
 		}
 	}
@@ -120,21 +128,33 @@ int parseGPS( const char * gpgllMessage, char * latude, char * lotude ){
 }
 
 void processGPS(){
-	char alert[100];
-	char current_longitude[20];
-	char current_latitude[20];
-	while(1){
+	char alert[TEXT_BUF_LEN];
+	char current_longitude[BUF_LEN];
+	char current_latitude[BUF_LEN];
+	char count = 0;
+	while(count < NUM_TRIES){
 		uart_send_string("AT#GPSGETMESSAGE\r",1);
 		if(parseGPS(gsmBuf, current_latitude, current_longitude)){
 			break;
 		}
-		//sendText( "gps signal lost", mikesnumber );
+		count++;
 	}
-	if(strcmp( current_latitude, latitude ) || strcmp( current_longitude, longitude )){
-		snprintf(alert, 100, "alert: latitude %s, longitude %s", current_latitude,
-					current_longitude);
-		printf("sending alert '%s'\n", alert );
-    	sendText(alert, mikesnumber);
+
+	if( count < 15 ){
+		if(strcmp( current_latitude, latitude ) || strcmp( current_longitude, longitude )){
+			sendText( "theft detected coordinates are:", mikesnumber );
+			snprintf(alert, TEXT_BUF_LEN, "%s %s", current_latitude,
+						current_longitude);
+			printf("sending alert '%s'\n", alert );
+			sendText(alert, mikesnumber);
+			strcpy(latitude, current_latitude);
+			strcpy(longitude, current_longitude);
+		}
+	}
+	else{
+		sendText("gps signal lost, last known location:", mikesnumber);
+		snprintf( alert, TEXT_BUF_LEN, "%s %s", latitude, longitude );
+		sendText( alert, mikesnumber );
 	}
 }
 
@@ -185,4 +205,12 @@ void processTEXT(){
 		__bis_SR_register(LPM0_bits);
 		//i know if i come out of here i will go into the delay for 10 seconds, and i am rearmed
 	}
+}
+
+void sendText( const char * message, const char * number ){
+	char sendbuf[TEXT_BUF_LEN];
+	snprintf( sendbuf, 100, "AT+CMGS=\"%s\"\r%s%c", number, message, 26 );
+	//char 26 is control-z
+	printf("sending message %s\n", sendbuf);
+	uart_send_string(sendbuf, 0);
 }

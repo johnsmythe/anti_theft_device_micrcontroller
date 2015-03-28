@@ -120,14 +120,6 @@ void uart_send_string( char * command, int mode ){
 	}while(!strstr( gsmBuf, "OK" ));
 }
 
-void sendText( const char * message, const char * number ){
-	char sendbuf[100];
-	snprintf( sendbuf, 100, "AT+CMGS=\"%s\"\r%s%c", number, message, 26 );
-	//char 26 is control-z
-	printf("sending message %s\n", sendbuf);
-	uart_send_string(sendbuf, 0);
-}
-
 void uart_send_char( unsigned char command ){
 	while(!(UCA0IFG & UCTXIFG));
 	//printf("transmitting: %c\n", command);

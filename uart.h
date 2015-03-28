@@ -10,7 +10,6 @@
 	void enable_UCA1_interrupt ( void );
 	void enable_UCA3_interrupt ( void );
 	void disable_UCA3_interrupt ( void );
-	void sendText( const char * message, const char * number );
 	void clear_buf(void);
 	extern char gsmBuf[1024];
 #endif
