@@ -93,8 +93,11 @@ void clear_buf(){
 	bufIndex = 0;
 }
 
+
+
 //mode 0 is slow, mode 1 is faster
-void uart_send_string( char * command, int mode ){
+int uart_send_string_with_timeout( char * command, int mode, int timeout ){
+	//printf("cmd: '%s'\n", command);
 	char * command_cpy = command;
 	do{
 		command = command_cpy;
@@ -113,11 +116,15 @@ void uart_send_string( char * command, int mode ){
 			__delay_cycles(600000);
 		}
 		else{
-			__delay_cycles(6000000);
+			__delay_cycles(7000000);
 		}
 		disable_UCA0_interrupt();
 		printf("woken up, gsmbuf is: %s\n", gsmBuf);
-	}while(!strstr( gsmBuf, "OK" ));
+		if(strstr(gsmBuf, "OK")){
+			return 1;
+		}
+	}while(timeout--);
+	return 0;
 }
 
 void uart_send_char( unsigned char command ){
